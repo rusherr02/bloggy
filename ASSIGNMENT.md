@@ -52,22 +52,18 @@ Create a test suite covering the following scenarios. You may use **any testing 
 
 #### Flows to test:
 
-1. **Authentication**
-   - Login with valid and invalid credentials
-
-2. **Blog Management**
+1. **Blog Management**
    - Create a new blog post and publish it
    - Delete a blog post with confirmation
 
-3. **Public Blog Viewing**
+2. **Public Blog Viewing**
    - View list of published blogs
    - Search for blogs by keyword
-
-4. **Browser Storage**
+   - View a blog
    - Theme preference persists across sessions
-   - Read blogs are visually marked
+   - Read blogs are visually marked across sessions
 
-5. **Pagination**
+3. **Pagination**
    - Navigate through multiple pages
    - Page state persists in URL
 
