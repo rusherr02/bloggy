@@ -83,4 +83,28 @@ export const commentApi = {
     api.delete(`/comments/${id}`)
 };
 
+// Upload API
+export const uploadApi = {
+  uploadImage: (file: File, onProgress?: (progress: number) => void) => {
+    const formData = new FormData();
+    formData.append('image', file);
+
+    return api.post<{ url: string; filename: string; size: number; mimetype: string }>(
+      '/upload',
+      formData,
+      {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        },
+        onUploadProgress: (progressEvent) => {
+          if (onProgress && progressEvent.total) {
+            const percentCompleted = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+            onProgress(percentCompleted);
+          }
+        }
+      }
+    );
+  }
+};
+
 export default api;

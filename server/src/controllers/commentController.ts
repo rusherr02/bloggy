@@ -1,8 +1,37 @@
 import { Request, Response } from 'express';
+import sanitizeHtml from 'sanitize-html';
 import { CommentModel } from '../models/commentModel.js';
 import { BlogModel } from '../models/blogModel.js';
 import { AuthRequest } from '../middleware/auth.js';
 import type { CommentCreateInput } from 'shared';
+
+// Import io dynamically to avoid circular dependency
+let io: any;
+export function setSocketIO(socketIO: any) {
+  io = socketIO;
+}
+
+const MAX_COMMENT_LENGTH = 2000;
+
+function validateAndSanitizeComment(content: string): { valid: boolean; sanitized?: string; error?: string } {
+  // Check if empty
+  if (!content || content.trim().length === 0) {
+    return { valid: false, error: 'Comment cannot be empty' };
+  }
+
+  // Check length
+  if (content.length > MAX_COMMENT_LENGTH) {
+    return { valid: false, error: `Comment cannot exceed ${MAX_COMMENT_LENGTH} characters` };
+  }
+
+  // Sanitize HTML/XSS
+  const sanitized = sanitizeHtml(content, {
+    allowedTags: [], // No HTML tags allowed
+    allowedAttributes: {}
+  });
+
+  return { valid: true, sanitized };
+}
 
 export const CommentController = {
   async getByBlogId(req: Request, res: Response) {
@@ -30,12 +59,32 @@ export const CommentController = {
         return res.status(400).json({ error: 'Missing required fields' });
       }
 
+      // Validate and sanitize content
+      const validation = validateAndSanitizeComment(data.content);
+      if (!validation.valid) {
+        return res.status(400).json({ error: validation.error });
+      }
+
+      // Validate author name length
+      if (data.authorName.trim().length === 0 || data.authorName.length > 100) {
+        return res.status(400).json({ error: 'Author name must be between 1 and 100 characters' });
+      }
+
       const blog = BlogModel.findById(data.blogId);
       if (!blog || blog.status === 'draft') {
         return res.status(404).json({ error: 'Blog not found' });
       }
 
+      // Use sanitized content
+      data.content = validation.sanitized!;
+
       const comment = CommentModel.create(data, false);
+
+      // Emit new comment via WebSocket
+      if (io) {
+        io.to(`blog-${data.blogId}`).emit('new-comment', comment);
+      }
+
       res.status(201).json(comment);
     } catch (error) {
       console.error('Create comment error:', error);
@@ -51,6 +100,12 @@ export const CommentController = {
         return res.status(400).json({ error: 'Missing required fields' });
       }
 
+      // Validate and sanitize content
+      const validation = validateAndSanitizeComment(data.content);
+      if (!validation.valid) {
+        return res.status(400).json({ error: validation.error });
+      }
+
       const blog = BlogModel.findById(data.blogId);
       if (!blog) {
         return res.status(404).json({ error: 'Blog not found' });
@@ -62,8 +117,16 @@ export const CommentController = {
 
       // Use authorName from request or default to "Author"
       data.authorName = data.authorName || 'Author';
+      // Use sanitized content
+      data.content = validation.sanitized!;
 
       const comment = CommentModel.create(data, true);
+
+      // Emit new comment via WebSocket
+      if (io) {
+        io.to(`blog-${data.blogId}`).emit('new-comment', comment);
+      }
+
       res.status(201).json(comment);
     } catch (error) {
       console.error('Create comment as author error:', error);

@@ -25,6 +25,7 @@ export interface Blog {
   tags: string[];
   status: 'draft' | 'published';
   authorId: number;
+  imageUrl?: string;
   views: number;
   likes: number;
   createdAt: string;
@@ -38,6 +39,7 @@ export interface BlogCreateInput {
   category: string;
   tags: string[];
   status: 'draft' | 'published';
+  imageUrl?: string;
 }
 
 export interface BlogUpdateInput extends Partial<BlogCreateInput> {

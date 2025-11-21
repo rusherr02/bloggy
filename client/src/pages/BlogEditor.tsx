@@ -16,12 +16,17 @@ import {
   Alert,
   CircularProgress,
   ToggleButtonGroup,
-  ToggleButton
+  ToggleButton,
+  LinearProgress,
+  IconButton,
+  Card,
+  CardMedia,
+  CardActions
 } from '@mui/material';
-import { Save, Publish } from '@mui/icons-material';
+import { Save, Publish, CloudUpload, Delete } from '@mui/icons-material';
 import ReactQuill from 'react-quill';
 import 'react-quill/dist/quill.snow.css';
-import { blogApi } from '../services/api';
+import { blogApi, uploadApi } from '../services/api';
 import type { Blog, BlogCreateInput, BlogUpdateInput } from 'shared';
 
 export default function BlogEditor() {
@@ -35,6 +40,9 @@ export default function BlogEditor() {
   const [category, setCategory] = useState('');
   const [tags, setTags] = useState<string[]>([]);
   const [status, setStatus] = useState<'draft' | 'published'>('draft');
+  const [imageUrl, setImageUrl] = useState<string>('');
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploading, setUploading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fetchingBlog, setFetchingBlog] = useState(isEditMode);
@@ -60,6 +68,7 @@ export default function BlogEditor() {
       setCategory(blog.category);
       setTags(blog.tags);
       setStatus(blog.status);
+      setImageUrl(blog.imageUrl || '');
     } catch (err: any) {
       setError(err.response?.data?.error || 'Failed to fetch blog');
     } finally {
@@ -82,7 +91,8 @@ export default function BlogEditor() {
           excerpt,
           category,
           tags,
-          status: blogStatus
+          status: blogStatus,
+          imageUrl: imageUrl || undefined
         };
         await blogApi.update(parseInt(id!), updateData);
       } else {
@@ -92,7 +102,8 @@ export default function BlogEditor() {
           excerpt,
           category,
           tags,
-          status: blogStatus
+          status: blogStatus,
+          imageUrl: imageUrl || undefined
         };
         await blogApi.create(createData);
       }
@@ -103,6 +114,42 @@ export default function BlogEditor() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Validate file size (5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      setError('Image size must be less than 5MB');
+      return;
+    }
+
+    // Validate file type
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+    if (!allowedTypes.includes(file.type)) {
+      setError('Only JPG, PNG, GIF, and WebP images are allowed');
+      return;
+    }
+
+    try {
+      setUploading(true);
+      setError(null);
+      const response = await uploadApi.uploadImage(file, setUploadProgress);
+      setImageUrl(response.data.url);
+      setUploadProgress(0);
+    } catch (err: any) {
+      setError(err.response?.data?.error || 'Failed to upload image');
+      setUploadProgress(0);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleRemoveImage = () => {
+    setImageUrl('');
+    setUploadProgress(0);
   };
 
   const quillModules = useMemo(() => ({
@@ -156,6 +203,60 @@ export default function BlogEditor() {
             required
             helperText="A short summary that appears in the blog list"
           />
+
+          <Box>
+            <Typography variant="subtitle2" gutterBottom>
+              Featured Image (Optional)
+            </Typography>
+            {imageUrl ? (
+              <Card sx={{ maxWidth: 400, mb: 2 }}>
+                <CardMedia
+                  component="img"
+                  height="200"
+                  image={imageUrl.startsWith('http') ? imageUrl : `http://localhost:3001${imageUrl}`}
+                  alt="Blog featured image"
+                />
+                <CardActions>
+                  <Button
+                    size="small"
+                    color="error"
+                    startIcon={<Delete />}
+                    onClick={handleRemoveImage}
+                  >
+                    Remove Image
+                  </Button>
+                </CardActions>
+              </Card>
+            ) : (
+              <Box>
+                <Button
+                  variant="outlined"
+                  component="label"
+                  startIcon={<CloudUpload />}
+                  disabled={uploading}
+                >
+                  Upload Image
+                  <input
+                    type="file"
+                    hidden
+                    accept="image/jpeg,image/png,image/gif,image/webp"
+                    onChange={handleImageUpload}
+                  />
+                </Button>
+                <Typography variant="caption" display="block" sx={{ mt: 1 }}>
+                  Max 5MB. Allowed: JPG, PNG, GIF, WebP
+                </Typography>
+              </Box>
+            )}
+            {uploading && (
+              <Box sx={{ width: '100%', mt: 2 }}>
+                <LinearProgress variant="determinate" value={uploadProgress} />
+                <Typography variant="caption" sx={{ mt: 0.5, display: 'block' }}>
+                  Uploading... {uploadProgress}%
+                </Typography>
+              </Box>
+            )}
+          </Box>
 
           <Box>
             <Typography variant="subtitle2" gutterBottom>

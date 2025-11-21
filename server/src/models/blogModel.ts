@@ -10,6 +10,7 @@ interface BlogRow {
   tags: string;
   status: 'draft' | 'published';
   author_id: number;
+  image_url?: string;
   views: number;
   likes: number;
   created_at: string;
@@ -27,6 +28,7 @@ function rowToBlog(row: BlogRow): Blog {
     tags: JSON.parse(row.tags),
     status: row.status,
     authorId: row.author_id,
+    imageUrl: row.image_url,
     views: row.views,
     likes: row.likes,
     createdAt: row.created_at,
@@ -53,8 +55,8 @@ function rowToBlogListItem(row: BlogRow): BlogListItem {
 export const BlogModel = {
   create(data: BlogCreateInput, authorId: number): Blog {
     const stmt = db.prepare(`
-      INSERT INTO blogs (title, content, excerpt, category, tags, status, author_id)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO blogs (title, content, excerpt, category, tags, status, author_id, image_url)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `);
     const result = stmt.run(
       data.title,
@@ -63,7 +65,8 @@ export const BlogModel = {
       data.category,
       JSON.stringify(data.tags),
       data.status,
-      authorId
+      authorId,
+      data.imageUrl || null
     );
 
     const blog = this.findById(result.lastInsertRowid as number);
@@ -210,6 +213,10 @@ export const BlogModel = {
     if (data.status !== undefined) {
       updates.push('status = ?');
       params.push(data.status);
+    }
+    if (data.imageUrl !== undefined) {
+      updates.push('image_url = ?');
+      params.push(data.imageUrl);
     }
 
     if (updates.length === 0) {

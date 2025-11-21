@@ -190,14 +190,30 @@ export default function AdminDashboard() {
         </>
       )}
 
-      <Dialog open={deleteDialogOpen} onClose={() => setDeleteDialogOpen(false)}>
+      <Dialog
+        open={deleteDialogOpen}
+        onClose={() => setDeleteDialogOpen(false)}
+        TransitionProps={{
+          timeout: 300
+        }}
+        PaperProps={{
+          sx: {
+            transition: 'all 300ms cubic-bezier(0.4, 0, 0.2, 1)'
+          }
+        }}
+      >
         <DialogTitle>Delete Blog Post</DialogTitle>
         <DialogContent>
           Are you sure you want to delete this blog post? This action cannot be undone.
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setDeleteDialogOpen(false)}>Cancel</Button>
-          <Button onClick={handleDelete} color="error" variant="contained">
+          <Button
+            onClick={handleDelete}
+            color="error"
+            variant="contained"
+            data-testid="confirm-delete-button"
+          >
             Delete
           </Button>
         </DialogActions>

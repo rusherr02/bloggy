@@ -34,6 +34,7 @@ export function initializeDatabase() {
       tags TEXT NOT NULL,
       status TEXT NOT NULL DEFAULT 'draft',
       author_id INTEGER NOT NULL,
+      image_url TEXT,
       views INTEGER DEFAULT 0,
       likes INTEGER DEFAULT 0,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP,

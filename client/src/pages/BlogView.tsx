@@ -16,9 +16,10 @@ import {
   Alert,
   Paper
 } from '@mui/material';
-import { ThumbUp, Visibility } from '@mui/icons-material';
+import { ThumbUp, Visibility, Circle } from '@mui/icons-material';
 import { blogApi, commentApi } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
+import { socketService } from '../services/socket';
 import type { Blog, Comment } from 'shared';
 
 export default function BlogView() {
@@ -29,11 +30,15 @@ export default function BlogView() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [liked, setLiked] = useState(false);
+  const [socketConnected, setSocketConnected] = useState(false);
 
   // Comment form state
   const [commentContent, setCommentContent] = useState('');
   const [commentAuthor, setCommentAuthor] = useState('');
   const [commentSubmitting, setCommentSubmitting] = useState(false);
+  const [commentError, setCommentError] = useState<string | null>(null);
+
+  const MAX_COMMENT_LENGTH = 2000;
 
   // Check if current user is the blog author
   const isAuthor = isAuthenticated && blog && user && blog.authorId === user.id;
@@ -42,8 +47,46 @@ export default function BlogView() {
     if (id) {
       fetchBlog();
       fetchComments();
+      setupWebSocket();
     }
+
+    return () => {
+      if (id) {
+        socketService.leaveBlog(parseInt(id));
+      }
+    };
   }, [id]);
+
+  const setupWebSocket = () => {
+    socketService.connect();
+    socketService.joinBlog(parseInt(id!));
+    setSocketConnected(socketService.isConnected());
+
+    const socket = socketService.getSocket();
+    if (socket) {
+      socket.on('connect', () => setSocketConnected(true));
+      socket.on('disconnect', () => setSocketConnected(false));
+    }
+
+    const handleNewComment = (comment: Comment) => {
+      // Only add if it's for this blog and not already in the list
+      if (comment.blogId === parseInt(id!)) {
+        setComments((prev) => {
+          // Avoid duplicates
+          if (prev.find(c => c.id === comment.id)) {
+            return prev;
+          }
+          return [comment, ...prev];
+        });
+      }
+    };
+
+    socketService.onNewComment(handleNewComment);
+
+    return () => {
+      socketService.offNewComment(handleNewComment);
+    };
+  };
 
   const fetchBlog = async () => {
     try {
@@ -87,14 +130,23 @@ export default function BlogView() {
 
   const handleCommentSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setCommentError(null);
 
     // Validation: content is always required
     if (!commentContent.trim()) {
+      setCommentError('Comment cannot be empty');
+      return;
+    }
+
+    // Check length
+    if (commentContent.length > MAX_COMMENT_LENGTH) {
+      setCommentError(`Comment cannot exceed ${MAX_COMMENT_LENGTH} characters`);
       return;
     }
 
     // For non-author comments, name is required
     if (!isAuthor && !commentAuthor.trim()) {
+      setCommentError('Please enter your name');
       return;
     }
 
@@ -119,9 +171,11 @@ export default function BlogView() {
 
       setCommentContent('');
       setCommentAuthor('');
+      setCommentError(null);
       await fetchComments();
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to post comment:', err);
+      setCommentError(err.response?.data?.error || 'Failed to post comment. Please try again.');
     } finally {
       setCommentSubmitting(false);
     }
@@ -155,9 +209,22 @@ export default function BlogView() {
 
   return (
     <Container maxWidth="md" sx={{ py: 4 }}>
-      <Typography variant="h3" component="h1" gutterBottom>
-        {blog.title}
-      </Typography>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 2 }}>
+        <Typography variant="h3" component="h1" sx={{ flexGrow: 1 }}>
+          {blog.title}
+        </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+          <Circle
+            sx={{
+              fontSize: 12,
+              color: socketConnected ? 'success.main' : 'error.main'
+            }}
+          />
+          <Typography variant="caption" color="text.secondary">
+            {socketConnected ? 'Live' : 'Offline'}
+          </Typography>
+        </Box>
+      </Box>
 
       <Box sx={{ mb: 3 }}>
         <Chip label={blog.category} color="primary" sx={{ mr: 1 }} />
@@ -190,6 +257,21 @@ export default function BlogView() {
 
       <Divider sx={{ my: 3 }} />
 
+      {blog.imageUrl && (
+        <Box
+          component="img"
+          src={blog.imageUrl.startsWith('http') ? blog.imageUrl : `http://localhost:3001${blog.imageUrl}`}
+          alt={blog.title}
+          sx={{
+            width: '100%',
+            maxHeight: '500px',
+            objectFit: 'cover',
+            borderRadius: 2,
+            mb: 3
+          }}
+        />
+      )}
+
       <Box
         sx={{ mb: 4 }}
         dangerouslySetInnerHTML={{ __html: blog.content }}
@@ -207,6 +289,11 @@ export default function BlogView() {
             Posting as Author - your comment will be highlighted
           </Alert>
         )}
+        {commentError && (
+          <Alert severity="error" sx={{ mb: 2 }} onClose={() => setCommentError(null)}>
+            {commentError}
+          </Alert>
+        )}
         <form onSubmit={handleCommentSubmit}>
           {!isAuthor && (
             <TextField
@@ -217,6 +304,7 @@ export default function BlogView() {
               required
               sx={{ mb: 2 }}
               helperText="Enter your name to post a comment"
+              inputProps={{ maxLength: 100 }}
             />
           )}
           <TextField
@@ -228,12 +316,14 @@ export default function BlogView() {
             rows={4}
             required
             sx={{ mb: 2 }}
+            error={commentContent.length > MAX_COMMENT_LENGTH}
+            helperText={`${commentContent.length}/${MAX_COMMENT_LENGTH} characters ${commentContent.length > MAX_COMMENT_LENGTH ? '(Too long!)' : ''}`}
           />
           <Button
             type="submit"
             variant="contained"
             color={isAuthor ? "success" : "primary"}
-            disabled={commentSubmitting}
+            disabled={commentSubmitting || commentContent.length > MAX_COMMENT_LENGTH}
           >
             {commentSubmitting ? 'Posting...' : (isAuthor ? 'Post as Author' : 'Post Comment')}
           </Button>
