@@ -17,9 +17,12 @@
     "build:client": "npm run build --workspace=client",
     "start": "npm run start --workspace=server",
     "seed": "npm run seed --workspace=server",
-    "reset": "npm run reset --workspace=server"
+    "reset": "npm run reset --workspace=server",
+    "test": "playwright test",
+    "test:ui": "playwright test --ui"
   },
   "devDependencies": {
+    "@playwright/test": "^1.57.0",
     "concurrently": "^8.2.2"
   },
   "engines": {
